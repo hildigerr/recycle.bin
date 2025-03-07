@@ -21,7 +21,8 @@ while [[ "$#" -gt 0 ]]; do
     -m) COMMIT_MESSAGE="$2"; shift ;;
     -b=*)
        pushd "$RECYCLE_BIN_DIR"
-       git checkout -b "${1#*=}" || exit 1
+       BRANCH="${1#*=}"
+       git checkout "$BRANCH" || git checkout -b "$BRANCH" master || exit 1
        popd
        shift ;;
     *) if [ -e "$1" ]; then FILES+=("$1")

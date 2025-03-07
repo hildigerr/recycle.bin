@@ -13,6 +13,7 @@ It is designed to preserve temporary or one-time-use files, such as scripts or o
 - **Customizable Commit Messages**: Specify custom commit messages or use automatically generated ones.
 - **Cross-Workstation Compatibility**: Clone this repository to any workstation and link the `recycle` script into your `PATH` for seamless integration.
 - **Public Sharing**: Make your recycle bin public, allowing others to "dig through your trash" at their own risk.
+- **Private Branches**: Specify an alternate branch for recycling stuff you don't want to share.
 
 ## Configuration
 
@@ -107,6 +108,12 @@ This repository is public by design. Other users are welcome to:
     ```
 
 6. Push your own trash to sync across workstations and/or share with others.
+
+7. Recycle stuff to a private branch and don't share it with others.
+
+    ```
+    recycle -b=private /potentially/sensitive/or/othewise/not/for/others.file
+    ```
 
 ## Usage
 
