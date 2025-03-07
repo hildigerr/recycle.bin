@@ -66,8 +66,7 @@ This repository is public by design. Other users are welcome to:
 4. Initialize the recycle bin directory by creating a personal branch:
 
     ```
-    cd $RECYCLE_BIN_DIR
-    git checkout -b $USER
+    recycle -b=$USER
     ```
 
 ### Recommended Method:
@@ -130,6 +129,18 @@ recycle [options] <file1> <file2> ...
 
     ```
     recycle /path/to/file1.txt /path/to/file2.txt
+    ```
+
+4. Initialize a new personal branch:
+
+    ```
+    recycle -b=$USER
+    ```
+
+5. Recycle files into a new branch:
+
+    ```
+    recycle -b=new_branch /path/to/oldfile1.txt /path/to/oldfile2.txt
     ```
 
 ## Default Commit Message Format
