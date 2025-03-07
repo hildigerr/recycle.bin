@@ -51,10 +51,11 @@ This repository is public by design. Other users are welcome to:
     export RECYCLE_BIN_DIR="/wherever/you/want/idc"
     ```
 
-2. Link the `recycle.sh` script into your `PATH`:
+2. Run `make install` to create links to the `recycle.sh` script and manpage. This is essentially equivalent to:
 
     ```
     ln --symbolic -T $RECYCLE_BIN_DIR/recycle.sh $HOME/.local/bin/recycle
+    ln --symbolic -T $RECYCLE_BIN_DIR/recycle.1 $HOME/.local/man/man1/recycle.1
     ```
 
 3. If `$HOME/.local/bin` is not in your `PATH`, you can add it in your shell configuration file:
@@ -63,7 +64,13 @@ This repository is public by design. Other users are welcome to:
     export PATH="$HOME/.local/bin:$PATH"
     ```
 
-4. Initialize the recycle bin directory by creating a personal branch:
+4. If `$HOME/.local/man` is not in your `MANPATH`, you can add it in your shell configuration file:
+
+    ```
+    export MANPATH="$HOME/.local/man:$MANPATH"
+    ```
+
+5. Initialize the recycle bin directory by creating a personal branch:
 
     ```
     recycle -b=$USER
