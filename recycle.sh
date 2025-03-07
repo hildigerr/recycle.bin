@@ -19,6 +19,10 @@ FILES=()
 while [[ "$#" -gt 0 ]]; do
   case $1 in
     -m) COMMIT_MESSAGE="$2"; shift ;;
+    -b=*)
+       pushd "$RECYCLE_BIN_DIR"
+       git checkout -b "${1#*=}" || exit 1
+       popd ;;
     *) if [ -e "$1" ]; then FILES+=("$1")
        else echo "Warning: File '$1' does not exist. Skipping."
        fi ;;
@@ -28,8 +32,8 @@ done
 
 # Check if valid files are provided
 if [ ${#FILES[@]} -eq 0 ]; then
-  echo "Error: Nothing to recycle. Aborting."
-  exit 1
+  echo "Warning: Nothing to recycle. Done."
+  exit
 fi
 
 # Move files to the recycle bin directory

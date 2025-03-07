@@ -15,6 +15,10 @@ The \fBrecycle\fR script moves specified files into a designated recycle bin dir
 \fB-m\fR "message"
 Specify a custom commit message for Git. If not provided, a default message will be generated using the current date and time. The list of files is always included in the commit message body.
 
+.TP
+.B \-b=\fIbranchname\fR
+Create and switch to a new branch named \fIbranchname\fR in the recycle bin repository before recycling any files.
+
 .SH USAGE EXAMPLES
 .TP
 Recycle a single file:
@@ -28,6 +32,14 @@ Recycle multiple files with a custom commit message:
 .TP
 Recycle multiple files with the default commit message:
 .B recycle /path/to/file1.txt /path/to/file2.txt
+
+.TP
+Initialize a new personal branch:
+.B recycle -b=$USER
+
+.TP
+Recycle files into a new branch:
+.B recycle -b=new_branch /path/to/oldfile1.txt /path/to/oldfile2.txt
 
 .SH DEFAULT COMMIT MESSAGE FORMAT
 .TP
