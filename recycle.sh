@@ -33,9 +33,12 @@ cherry_pick() {
 FILES=()
 while [[ "$#" -gt 0 ]]; do
   case $1 in
+    -b) branch "$2"; shift ;;
     -b=*) branch "${1#*=}" ;;
+    -cp) cherry_pick "$2"; shift ;;
     -cp=*) cherry_pick "${1#*=}" ;;
     -m) COMMIT_MESSAGE="$2"; shift ;;
+    -m=*) COMMIT_MESSAGE="${1#*=}" ;;
     *) if [ -e "$1" ]; then FILES+=("$1")
        else echo "Warning: File '$1' does not exist. Skipping."
        fi ;;
