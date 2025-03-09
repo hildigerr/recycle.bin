@@ -11,9 +11,6 @@ recycle \- move files to a recycle bin directory with Git tracking
 The \fBrecycle\fR script moves specified files into a designated recycle bin directory while tracking changes using Git. It is designed for preserving temporary or one-time-use files that may be useful later.
 
 .SH OPTIONS
-.TP
-\fB-m\fR "message"
-Specify a custom commit message for Git. If not provided, a default message will be generated using the current date and time. The list of files is always included in the commit message body.
 
 .TP
 .B \-b=\fIbranchname\fR
@@ -22,6 +19,10 @@ Switch to the specified branch named \fIbranchname\fR in the recycle bin reposit
 .TP
 .B \-cp=\fIhash_of_commit\fR
 Copy the recycled files from a specified commit into the active branch. This option allows you to cherry-pick commits from another branch into your current branch. It is particularly useful for maintaining a clean installation by copying commits from other branches (e.g., from an upstream repository) and then removing the original branch if desired.
+
+.TP
+\fB-m\fR "message"
+Specify a custom commit message for Git. If not provided, a default message will be generated using the current date and time. The list of files is always included in the commit message body.
 
 .SH USAGE EXAMPLES
 .TP

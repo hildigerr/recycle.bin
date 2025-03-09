@@ -18,7 +18,6 @@ fi
 FILES=()
 while [[ "$#" -gt 0 ]]; do
   case $1 in
-    -m) COMMIT_MESSAGE="$2"; shift ;;
     -b=*)
        pushd "$RECYCLE_BIN_DIR"
        BRANCH="${1#*=}"
@@ -29,6 +28,7 @@ while [[ "$#" -gt 0 ]]; do
        pushd "$RECYCLE_BIN_DIR"
        git cherry-pick "${1#*=}"
        popd ;;
+    -m) COMMIT_MESSAGE="$2"; shift ;;
     *) if [ -e "$1" ]; then FILES+=("$1")
        else echo "Warning: File '$1' does not exist. Skipping."
        fi ;;
