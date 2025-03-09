@@ -14,20 +14,27 @@ if [ ! -d "$RECYCLE_BIN_DIR" ]; then
   popd
 fi
 
+branch() {
+  BRANCH=$1
+  pushd "$RECYCLE_BIN_DIR"
+  git checkout "$BRANCH" 2>/dev/null || \
+  git checkout -b "$BRANCH" master || exit 1
+  popd 
+}
+
+cherry_pick() {
+  HASH=$1
+  pushd "$RECYCLE_BIN_DIR"
+  git cherry-pick $HASH || exit 1
+  popd 
+}
+
 # Parse arguments
 FILES=()
 while [[ "$#" -gt 0 ]]; do
   case $1 in
-    -b=*)
-       pushd "$RECYCLE_BIN_DIR"
-       BRANCH="${1#*=}"
-       git checkout "$BRANCH" 2>/dev/null || \
-       git checkout -b "$BRANCH" master || exit 1
-       popd ;;
-    -cp=*)
-       pushd "$RECYCLE_BIN_DIR"
-       git cherry-pick "${1#*=}"
-       popd ;;
+    -b=*) branch "${1#*=}" ;;
+    -cp=*) cherry_pick "${1#*=}" ;;
     -m) COMMIT_MESSAGE="$2"; shift ;;
     *) if [ -e "$1" ]; then FILES+=("$1")
        else echo "Warning: File '$1' does not exist. Skipping."
