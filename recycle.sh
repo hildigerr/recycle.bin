@@ -25,6 +25,10 @@ while [[ "$#" -gt 0 ]]; do
        git checkout "$BRANCH" 2>/dev/null || \
        git checkout -b "$BRANCH" master || exit 1
        popd ;;
+    -cp=*)
+       pushd "$RECYCLE_BIN_DIR"
+       git cherry-pick "${1#*=}"
+       popd ;;
     *) if [ -e "$1" ]; then FILES+=("$1")
        else echo "Warning: File '$1' does not exist. Skipping."
        fi ;;

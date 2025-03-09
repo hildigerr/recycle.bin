@@ -97,8 +97,7 @@ This repository is public by design. Other users are welcome to:
 4. (Optional) Keep items from my trash in your own branch:
 
     ```
-    git checkout $USER
-    git cherry-pick <hash>
+    recycle -b=$USER -cp=<hash_of_commit>
     ```
 
 5. (Optional) Remove my branch:

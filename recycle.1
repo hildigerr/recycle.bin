@@ -19,6 +19,10 @@ Specify a custom commit message for Git. If not provided, a default message will
 .B \-b=\fIbranchname\fR
 Switch to the specified branch named \fIbranchname\fR in the recycle bin repository before recycling any files. If the branch does not exist, it will be created based on the \fImaster\fR branch. The specified branch will remain active after the operation. If this option is not used, the currently active branch will be used.
 
+.TP
+.B \-cp=\fIhash_of_commit\fR
+Copy the recycled files from a specified commit into the active branch. This option allows you to cherry-pick commits from another branch into your current branch. It is particularly useful for maintaining a clean installation by copying commits from other branches (e.g., from an upstream repository) and then removing the original branch if desired.
+
 .SH USAGE EXAMPLES
 .TP
 Recycle a single file:
@@ -40,6 +44,10 @@ Initialize a new personal branch:
 .TP
 Recycle files into a private branch:
 .B recycle -b=private /path/to/sensitive/file1.txt /path/to/unshared/file2.txt
+
+.TP
+Switch to a personal branch and copy the specified commit into it. This allows you to integrate specific recycled files without merging entire branches.
+.B recycle -b=$USER -cp=<hash_of_commit>
 
 .SH DEFAULT COMMIT MESSAGE FORMAT
 .TP
