@@ -45,6 +45,11 @@ while [[ "$#" -gt 0 ]]; do
     --branch=*|-b=*) branch "${1#*=}" ;;
     --cherry-pick|--copy|-cp) cherry_pick "$2"; shift ;;
     --cherry-pick=*|--copy=*|-cp=*) cherry_pick "${1#*=}" ;;
+    --list|-ls) pushd "$RECYCLE_BIN_DIR" && ls && popd ;;
+    --llist|-ll) pushd "$RECYCLE_BIN_DIR" && ls -l && popd ;;
+    --log) pushd "$RECYCLE_BIN_DIR" || exit 1
+      git log --all --oneline --decorate --graph
+      popd ;;
     --message|-m) COMMIT_MESSAGE="$2"; shift ;;
     --message=*|-m=*) COMMIT_MESSAGE="${1#*=}" ;;
     *) if [ -e "$1" ]; then FILES+=("$1")

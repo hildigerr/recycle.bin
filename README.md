@@ -90,8 +90,7 @@ This repository is public by design. Other users are welcome to:
 3. "Dig through my trash" at your own risk:
 
     ```
-    git checkout hildigerr
-    git pull upstream hildigerr
+    recycle -b=hildigerr --log
     ```
 
 4. (Optional) Keep items from my trash in your own branch:
@@ -125,6 +124,10 @@ recycle [options] <file1> <file2> ...
 - `-b "branchname"`:  Switch to the specified branch named \fIbranchname\fR in the recycle bin repository before recycling any files. If the branch does not exist, it will be created based on the \fImaster\fR branch. The specified branch will remain active after the operation. If this option is not used, the currently active branch will be used.
 
 - `-cp "hash_of_commit"`: Copy the recycled files from a specified commit into the active branch. This option allows you to cherry-pick commits from another branch into your current branch. It is particularly useful for maintaining a clean installation by copying commits from other branches (e.g., from an upstream repository) and then removing the original branch if desired.
+
+- `-ls`: List files in the recycle bin.
+
+- `--log`: Show the git commit log for the recycle bin.
 
 - `-m "message"`: Specify a custom commit message. If not provided, a default message including the date, time, and original file paths will be used.
 
