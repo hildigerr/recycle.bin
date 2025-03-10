@@ -6,6 +6,14 @@ RECYCLE_BIN_DIR="${RECYCLE_BIN_DIR:-$HOME/.local/share/recycle.bin}"
 # Default commit message head line
 COMMIT_MESSAGE="[$(date +"%Y-%m-%d-%H%M.%S")]"
 
+# Silence pushd and popd
+pushd () {
+  command pushd "$@" > /dev/null
+}
+popd () {
+  command popd "$@" > /dev/null
+}
+
 # Check if RECYCLE_BIN_DIR exists, if not create it and initialize git
 if [ ! -d "$RECYCLE_BIN_DIR" ]; then
   mkdir -p "$RECYCLE_BIN_DIR"
