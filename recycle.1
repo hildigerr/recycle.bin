@@ -13,23 +13,26 @@ The \fBrecycle\fR script moves specified files into a designated recycle bin dir
 .SH OPTIONS
 
 .TP
-.B \-b=\fIbranchname\fR
+.B \-b, \-\-branch <branchname>
 Switch to the specified branch named \fIbranchname\fR in the recycle bin repository before recycling any files. If the branch does not exist, it will be created based on the \fImaster\fR branch. The specified branch will remain active after the operation. If this option is not used, the currently active branch will be used.
 
 .TP
-.B \-cp=\fIhash_of_commit\fR
+.B \-cp, \-\-cherry-pick, \-\-copy <hash_of_commit>
 Copy the recycled files from a specified commit into the active branch. This option allows you to cherry-pick commits from another branch into your current branch. It is particularly useful for maintaining a clean installation by copying commits from other branches (e.g., from an upstream repository) and then removing the original branch if desired.
 
 .TP
-.B \-\-list
+.B \-ls, \-\-list
 List files in the recycle bin.
+.TP
+.B \-ll, \-\-llist
+List files in the recycle bin in the long listing format.
 
 .TP
 .B \-\-log
 Show the git commit log for the recycle bin.
 
 .TP
-\fB-m\fR "message"
+\fB-m, --message\fR "commit message"
 Specify a custom commit message for Git. If not provided, a default message will be generated using the current date and time. The list of files is always included in the commit message body.
 
 .SH USAGE EXAMPLES
