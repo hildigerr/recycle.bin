@@ -44,6 +44,8 @@ This repository is public by design. Other users are welcome to:
 
 3. (Optional) Place or link the script in a directory in your `PATH` for easy access from any location (see Personal Method step 2).
 
+4. (Optional) Include the man page and/or bash completions as well.
+
 ### Personal Method:
 
 1. Clone this repository into `$HOME/.local/share/`, or if cloned into an alternate location:
@@ -57,6 +59,7 @@ This repository is public by design. Other users are welcome to:
     ```
     ln --symbolic -T $RECYCLE_BIN_DIR/recycle.sh $HOME/.local/bin/recycle
     ln --symbolic -T $RECYCLE_BIN_DIR/recycle.1 $HOME/.local/man/man1/recycle.1
+    ln --symbolic -T $RECYCLE_BIN_DIR/recycle $HOME/.local/share/bash-completion/completions/recycle
     ```
 
 3. If `$HOME/.local/bin` is not in your `PATH`, you can add it in your shell configuration file:

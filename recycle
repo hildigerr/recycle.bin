@@ -1,0 +1,46 @@
+# bash completion for recycle(1)                          -*- shell-script -*-
+
+_recycle_completion() {
+  local cur prev words cword
+  local recycle_bin_dir="${RECYCLE_BIN_DIR:-$HOME/.local/share/recycle.bin}"
+
+  COMPREPLY=()
+  _get_comp_words_by_ref cur prev words cword
+
+  local opts="--branch -b --cherry-pick --copy -cp --list -ls --llist -ll --log --message -m"
+
+  case "$prev" in
+    --branch|-b)
+      if [[ -d "$recycle_bin_dir" ]]; then
+        pushd "$recycle_bin_dir" > /dev/null 2>&1
+        local branches="$(git branch --format='%(refname:short)' 2>/dev/null)"
+        #echo "Branches: $branches" #debug barf
+        COMPREPLY=($(compgen -W "$branches" -- "${cur}"))
+        popd > /dev/null 2>&1
+      fi
+      return 0
+      ;;
+    --cherry-pick|--copy|-cp)
+      if [[ -d "$recycle_bin_dir" ]]; then
+        pushd "$recycle_bin_dir" > /dev/null 2>&1
+        local hashes="$(git log --pretty=format:'%h' 2>/dev/null)"
+        #echo "Hashes: $hashes" #debug barf
+        COMPREPLY=($(compgen -W "$hashes" -- "${cur}"))
+        popd > /dev/null 2>&1
+      fi
+      return 0
+      ;;
+    --message|-m)
+      return 0
+      ;;
+    *)
+      COMPREPLY=($(compgen -W "$opts" -- "${cur}"))
+      if [[ -n "${cur}" ]]; then
+        COMPREPLY+=($(compgen -f -- "${cur}"))
+      fi
+      return 0
+      ;;
+  esac
+}
+
+complete -F _recycle_completion recycle
