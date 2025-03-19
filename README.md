@@ -184,6 +184,9 @@ Where:
 - `/original/file/path/input.file` is the full path of the file being moved.
 - The list of files is always included in the commit message body.
 
+### File Path Handling
+The file list in the commit message will be resolved to absolute form. However, home directory paths are anonymized by removing the `/home/username/` prefix.
+
 ## Error Handling
 
 - **Non-existent recycle.bin directory**: Creates the directory and initializes a Git repository within it.

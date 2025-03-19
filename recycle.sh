@@ -52,7 +52,7 @@ while [[ "$#" -gt 0 ]]; do
       popd ;;
     --message|-m) COMMIT_MESSAGE="$2"; shift ;;
     --message=*|-m=*) COMMIT_MESSAGE="${1#*=}" ;;
-    *) if [ -e "$1" ]; then FILES+=("$1")
+    *) if [ -e "$1" ]; then FILES+=("$(realpath -m -- "$1")")
        else echo "Warning: File '$1' does not exist. Skipping."
        fi ;;
   esac
@@ -73,5 +73,5 @@ done
 # Stage and commit changes with git
 cd "$RECYCLE_BIN_DIR" || exit 1
 git add .
-git commit -m "$COMMIT_MESSAGE" -m "$(printf "/%s\n" "${FILES[@]}")"
+git commit -m "$COMMIT_MESSAGE" -m "$(printf "%s\n" "${FILES[@]#/home/*/}")"
 

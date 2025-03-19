@@ -74,6 +74,9 @@ In all cases, the content paragraph will contain the list of files:
 .br
 .B /original/file/path/of/last/input.file
 
+.TP
+File paths are resolved to their absolute form using realpath, handling relative paths and symbolic links. However, in the commit message, home directory paths are anonymized by removing the \fI/home/username/\fR prefix.
+
 .SH REPOSITORY STRUCTURE
 The main branch contains development for the \fBrecycle\fR script itself. Other branches store recycled items for individual users, systems, or purposes.
 
