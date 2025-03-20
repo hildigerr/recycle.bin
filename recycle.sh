@@ -73,6 +73,15 @@ done
 if [ ${#FILES[@]} -eq 0 ]; then
   echo "Warning: Nothing to recycle. Done."
   exit
+elif [ -z "$FORCE_P" ] ; then
+  for FILE in "${FILES[@]}"; do
+    BASENAME=$(basename "$FILE")
+    if [ -e "$RECYCLE_BIN_DIR/$BASENAME" ]; then
+      echo "Error: '$BASENAME' already exists in the recycle bin."
+      echo "Operation aborted. Use --force to overwrite existing files."
+      exit 1
+    fi
+  done
 fi
 
 # Move files to the recycle bin directory

@@ -132,7 +132,7 @@ recycle [options] <file1> <file2> ...
 
 - `-cp, --cherry-pick, --copy <hash_of_commit>`: Copy the recycled files from a specified commit into the active branch. This option allows you to cherry-pick commits from another branch into your current branch. It is particularly useful for maintaining a clean installation by copying commits from other branches (e.g., from an upstream repository) and then removing the original branch if desired.
 
-- `-f, --force`: Enable force mode for subsequent operations. When used with --push, it forces the push operation even if it results in a non-fast-forward update. This option must be specified before --push to take effect. Use with extreme caution as it can overwrite remote changes and potentially cause data loss.
+- `-f, --force`: Enable force mode for subsequent operations. When used with --push, it forces the push operation even if it results in a non-fast-forward update. For file operations, it allows overwriting of existing files in the recycle bin. Use with extreme caution as it can overwrite remote changes and local recycled files, potentially causing data loss. NOTE: When using --force with --push, the order is significant. To perform a force push, use --force before --push.
 
 - `-ls, --list`: List files in the recycle bin.
 

@@ -2,5 +2,4 @@
 -ammend
 -drop=hash (rebase drop)
 -restore=hash (copy files back to original location, don't clobber)
--force (do clobber, force push)
 -xxx=branch (move last commit to a different branch)
