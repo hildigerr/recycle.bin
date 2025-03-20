@@ -7,7 +7,7 @@ _recycle_completion() {
   COMPREPLY=()
   _get_comp_words_by_ref cur prev words cword
 
-  local opts="--branch -b --cherry-pick --copy -cp --list -ls --llist -ll --log --message -m"
+  local opts="--branch -b --cherry-pick --copy -cp --list -ls --llist -ll --log --message -m --push"
 
   #echo "words: ${words[@]}" #debug barf
   #echo "cword: $cword" #debug barf
@@ -48,6 +48,16 @@ _recycle_completion() {
       return 0
       ;;
     --message|-m|--message=|-m=)
+      return 0
+      ;;
+    --push=)
+      if [[ -d "$recycle_bin_dir" ]]; then
+        pushd "$recycle_bin_dir" > /dev/null 2>&1
+        local remotes="$(git remote 2>/dev/null)"
+        #echo "Remotes: \"$remotes\"" #debug barf
+        COMPREPLY=($(compgen -W "$remotes" -- "${cur}"))
+        popd > /dev/null 2>&1
+      fi
       return 0
       ;;
     *)

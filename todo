@@ -1,4 +1,3 @@
--push
 -pull
 -ammend
 -drop=hash (rebase drop)

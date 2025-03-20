@@ -37,6 +37,13 @@ cherry_pick() {
   popd 
 }
 
+git_push() {
+  REMOTE=$1
+  pushd "$RECYCLE_BIN_DIR"
+  git push "$REMOTE" HEAD || exit 1
+  popd 
+}
+
 # Parse arguments
 FILES=()
 while [[ "$#" -gt 0 ]]; do
@@ -52,6 +59,8 @@ while [[ "$#" -gt 0 ]]; do
       popd ;;
     --message|-m) COMMIT_MESSAGE="$2"; shift ;;
     --message=*|-m=*) COMMIT_MESSAGE="${1#*=}" ;;
+    --push) git_push origin ;;
+    --push=*) git_push "${1#*=}" ;;
     *) if [ -e "$1" ]; then FILES+=("$(realpath -m -- "$1")")
        else echo "Warning: File '$1' does not exist. Skipping."
        fi ;;

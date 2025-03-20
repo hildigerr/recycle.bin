@@ -35,6 +35,12 @@ Show the git commit log for the recycle bin.
 \fB-m, --message\fR "commit message"
 Specify a custom commit message for Git. If not provided, a default message will be generated using the current date and time. The list of files is always included in the commit message body.
 
+.TP
+.B \-\-push[=<remote>]
+Uploads the current branch of the recycle bin repository to the specified remote. If no remote is specified, it defaults to 'origin'. This option allows you to share your recycled changes with a remote repository, making them accessible to other users or systems. It's useful for backing up your recycled files or synchronizing changes across different environments.
+
+Note: Ensure you have the necessary permissions to push to the specified remote.
+
 .SH USAGE EXAMPLES
 .TP
 Recycle a single file:
@@ -60,6 +66,10 @@ Recycle files into a private branch:
 .TP
 Switch to a personal branch and copy the specified commit into it. This allows you to integrate specific recycled files without merging entire branches.
 .B recycle -b=$USER -cp=<hash_of_commit>
+
+.TP
+Synchronize the remote repository, by pushing a personal branch to origin and a private branch to a private remote. Note: the recycle bin will be in the private branch afterward.
+.B recycle -b=$USER --push -b=private --push=<non_public_remote>
 
 .SH DEFAULT COMMIT MESSAGE FORMAT
 .TP

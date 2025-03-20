@@ -110,6 +110,10 @@ This repository is public by design. Other users are welcome to:
 
 6. Push your own trash to sync across workstations and/or share with others.
 
+    ```
+    recycle --push
+    ```
+
 7. Recycle stuff to a private branch and don't share it with others.
 
     ```
@@ -135,6 +139,8 @@ recycle [options] <file1> <file2> ...
 - `--log`: Show the git commit log for the recycle bin.
 
 - `-m, --message "commit message"`: Specify a custom commit message. If not provided, a default message including the date, time, and original file paths will be used.
+
+- `--push[=<remote>]`: Upload the current branch of the recycle bin repository to the specified remote. If no remote is specified, it defaults to 'origin'. This option allows you to share your recycled changes with a remote repository, making them accessible to other users or systems. It's useful for backing up your recycled files or synchronizing changes across different environments.
 
 ### Examples
 
@@ -166,6 +172,12 @@ recycle [options] <file1> <file2> ...
 
     ```
     recycle -b=new_branch /path/to/oldfile1.txt /path/to/oldfile2.txt
+    ```
+
+6. Synchronize the remote repository, by pushing a personal branch to origin and a private branch to a private remote. Note: the recycle bin will be in the private branch afterward.
+
+    ```
+    recycle -b=$USER --push -b=private --push=<non_public_remote>
     ```
 
 ## Default Commit Message Format
