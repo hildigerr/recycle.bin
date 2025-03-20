@@ -47,6 +47,16 @@ _recycle_completion() {
       fi
       return 0
       ;;
+    --log=)
+      if [[ -d "$recycle_bin_dir" ]]; then
+        pushd "$recycle_bin_dir" > /dev/null 2>&1
+        local files="$(ls 2>/dev/null)"
+        #echo "Files: $files" #debug barf
+        COMPREPLY=($(compgen -W "$files" -- "${cur}"))
+        popd > /dev/null 2>&1
+      fi
+      return 0
+      ;;
     --message|-m|--message=|-m=)
       return 0
       ;;

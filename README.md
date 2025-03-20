@@ -138,7 +138,7 @@ recycle [options] <file1> <file2> ...
 
 - `-ll, --llist`: List files in the recycle bin in the long listing format.
 
-- `--log`: Show the git commit log for the recycle bin.
+- `--log[=<filename>]`: Show the git commit log for the recycle bin, or a specific file within if specified.
 
 - `-m, --message "commit message"`: Specify a custom commit message. If not provided, a default message including the date, time, and original file paths will be used.
 

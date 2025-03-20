@@ -39,7 +39,7 @@ cherry_pick() {
 
 git_log() {
   pushd "$RECYCLE_BIN_DIR" || exit 1
-  git log --all --oneline --decorate --graph
+  git log --all --oneline --decorate --graph $1
   popd
 }
 
@@ -62,6 +62,7 @@ while [[ "$#" -gt 0 ]]; do
     --list|-ls) pushd "$RECYCLE_BIN_DIR" && ls && popd ;;
     --llist|-ll) pushd "$RECYCLE_BIN_DIR" && ls -l && popd ;;
     --log) git_log ;;
+    --log=*) git_log "${1#*=}" ;;
     --message|-m) COMMIT_MESSAGE="$2"; shift ;;
     --message=*|-m=*) COMMIT_MESSAGE="${1#*=}" ;;
     --push) git_push origin ;;
