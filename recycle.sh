@@ -40,7 +40,7 @@ cherry_pick() {
 git_push() {
   REMOTE=$1
   pushd "$RECYCLE_BIN_DIR"
-  git push "$REMOTE" HEAD || exit 1
+  git push $FORCE_P "$REMOTE" HEAD || exit 1
   popd 
 }
 
@@ -52,6 +52,7 @@ while [[ "$#" -gt 0 ]]; do
     --branch=*|-b=*) branch "${1#*=}" ;;
     --cherry-pick|--copy|-cp) cherry_pick "$2"; shift ;;
     --cherry-pick=*|--copy=*|-cp=*) cherry_pick "${1#*=}" ;;
+    --force|-f) FORCE_P="--force" ;;
     --list|-ls) pushd "$RECYCLE_BIN_DIR" && ls && popd ;;
     --llist|-ll) pushd "$RECYCLE_BIN_DIR" && ls -l && popd ;;
     --log) pushd "$RECYCLE_BIN_DIR" || exit 1
