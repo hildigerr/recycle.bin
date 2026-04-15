@@ -1,0 +1,572 @@
+#!/usr/bin/env bash
+# Schedule a one-shot command via a systemd transient timer.
+# POSIX-compatible replacement for the traditional at(1) utility.
+#
+# SYNOPSIS
+# Usage:
+#   at [-m] [-f file] [-q queue] -t time_arg
+#   at [-m] [-f file] [-q queue] timespec...
+#   at [-m] [-f file] [-q queue] timespec... -- command [args...]
+#   at -l [-q queue] [at_job_id...]         (list pending jobs  — like atq)
+#   at -r at_job_id...                      (delete jobs        — like atrm)
+#
+# POSIX timespec grammar (subset implemented here):
+#   timespec  : time | time date | time increment | time date increment | nowspec
+#   nowspec   : "now" | "now" increment
+#   time      : HH[:MM][am|pm] | noon | midnight | now
+#   date      : month_name day [, year] | day_of_week | today | tomorrow
+#   increment : "+" number period | "next" period
+#   period    : minute[s] | hour[s] | day[s] | week[s] | month[s] | year[s]
+#
+# TIMESPEC examples (same as `at`):
+#   now + 5 minutes        in 5 minutes
+#   now + 2 hours          in 2 hours
+#   now + 3 days           in 3 days
+#   now + 1 week           in 1 week
+#   noon                   today at 12:00 (or tomorrow if already past)
+#   midnight               today at 00:00 (or tomorrow if already past)
+#   teatime                today at 16:00 (or tomorrow if already past)
+#   HH:MM                  today at HH:MM  (or tomorrow if already past)
+#   HH:MM tomorrow         tomorrow at HH:MM
+#   HH:MM YYYY-MM-DD       specific date/time
+#   HH:MM MM/DD/YYYY       specific date/time (US format)
+#   HH:MM DD.MM.YYYY       specific date/time (EU format)
+#   HH:MM next monday      next occurrence of a weekday
+#   HH:MM Jan 15           named month + day (current/next year)
+#
+# Jobs are stored as small scripts under ~/.local/share/systemd-at/
+# Each job gets a unique numeric ID. The unit description encodes the ID so
+# `systemctl list-timers` also shows them.
+#
+# Transient timer names look like: systemd-at-NNN-XXXXX.timer
+#
+# Requirements: bash >= 4, systemd (systemd-run, systemctl, systemd-analyze)
+
+set -euo pipefail
+
+### -- constants --------------------------------------------------------------
+
+JOB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/systemd-at"
+UNIT_PREFIX="systemd-at"          # transient unit names start with this
+
+### -- helpers ----------------------------------------------------------------
+
+die()  { echo "at: $*" >&2; exit 1; }
+warn() { echo "at: warning: $*" >&2; }
+
+require() {
+    for cmd in "$@"; do
+        command -v "$cmd" &>/dev/null || die "required command not found: $cmd"
+    done
+}
+
+# POSIX-specified date format: "Www Mmm DD HH:MM:SS YYYY"
+posix_date() {
+    if [[ -n "${1:-}" ]]; then
+        date -d "$1" +"%a %b %e %T %Y"
+    else
+        date +"%a %b %e %T %Y"
+    fi
+}
+
+next_job_id() {
+    mkdir -p "$JOB_DIR"
+    local id_file="$JOB_DIR/.next_id"
+    local id=1
+    [[ -f "$id_file" ]] && id=$(<"$id_file")
+    echo $(( id + 1 )) > "$id_file"
+    printf '%s' "$id"
+}
+
+### -- list all pending systemd-at jobs for the current user ------------------
+list_jobs() {
+    local id_filters=("$@")
+
+    while IFS= read -r line; do
+        # Parse output of systemctl list-timers --user
+        # Columns: NEXT LEFT LAST PASSED UNIT ACTIVATES
+        [[ "$line" == *"${UNIT_PREFIX}-"* && "$line" == *".timer"* ]] || continue
+        # Extract the unit name (field 5 in list-timers output)
+        local unit
+        unit=$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i ~ /\.timer$/) print $i}')
+        # job id is encoded in the unit name
+        local jid
+        jid=$(echo "$unit" | sed -n "s/${UNIT_PREFIX}-\([0-9]*\)-.*/\1/p")
+
+        if [[ ${#id_filters[@]} -gt 0 ]]; then
+            local match=0
+            for f in "${id_filters[@]}"; do [[ "$f" == "$jid" ]] && match=1; done
+            [[ $match -eq 1 ]] || continue
+        fi
+
+        local ts_raw
+        ts_raw=$(echo "$line" | awk '{print $1, $2, $3}')
+        local ts
+        ts=$(posix_date "$ts_raw" 2>/dev/null || echo "$ts_raw")
+
+        # POSIX stdout format: "%s\t%s\n"  at_job_id <date>
+        printf '%s\t%s\n' "$jid" "$ts"
+    done < <(systemctl list-timers --user --no-legend --no-pager 2>/dev/null || true)
+}
+
+### -- Remove a job by ID -----------------------------------------------------
+remove_job() {
+    local jid="$1"
+    local found=0
+    while IFS= read -r unit; do
+        [[ "$unit" == "${UNIT_PREFIX}-${jid}-"* ]] || continue
+        found=1
+        systemctl --user stop "$unit" 2>/dev/null || true
+        gio trash "$JOB_DIR/env-${jid}.sh" "$JOB_DIR/job-${jid}.sh" "$JOB_DIR/run-${jid}.sh"
+    done < <(systemctl list-timers --user --no-legend --no-pager 2>/dev/null \
+             | awk '{for(i=1;i<=NF;i++) if($i ~ /\.timer$/) print $i}' || true)
+    [[ $found -eq 1 ]] || die "job $jid not found"
+}
+
+### -- environment snapshot ---------------------------------------------------
+# Captures PWD, umask, and exported variables so the job runs with the same
+# context as the invoking shell, as required by POSIX.
+capture_env() {
+    local env_file="$1"
+    {
+        echo "# environment snapshot — captured by at(1)"
+        printf 'cd %q || true\n' "$PWD"
+        printf 'umask %s\n' "$(umask)"
+        while IFS='=' read -r name value; do
+            case "$name" in
+                # Variables POSIX/at excludes, plus bash internals
+                TERM|DISPLAY|_|PPID|BASH_VERSINFO|EUID|UID|GROUPS) continue ;;
+                SHELLOPTS|BASHOPTS|SHLVL|OLDPWD|COMP_*|'') continue ;;
+            esac
+            [[ "$name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || continue
+            printf 'export %s=%q\n' "$name" "$value"
+        done < <(env)
+    } > "$env_file"
+}
+
+### -- time-spec parser -------------------------------------------------------
+#
+# Returns an OnCalendar= value accepted by systemd-run.
+# Strategy: translate at-style specs to an absolute "YYYY-MM-DD HH:MM:SS"
+# timestamp (or a relative systemd-run --on-active= value where simpler).
+#
+# Sets in the caller's scope:
+#   TIMESPEC_KIND    "active" | "calendar"
+#   TIMESPEC_VALUE   systemd duration string or "YYYY-MM-DD HH:MM:SS"
+#   TIMESPEC_DISPLAY POSIX date string for the confirmation message
+#
+# TIMESPEC_KIND = "active"   --> use --on-active=TIMESPEC_VALUE
+# TIMESPEC_KIND = "calendar" --> use --on-calendar=TIMESPEC_VALUE
+parse_timespec() {
+    local spec="$*"
+    local lspec
+    lspec=$(echo "$spec" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ //;s/ $//')
+
+    # -- relative: "now + N unit" ---------------------------------------------
+    TIMESPEC_KIND="active"
+    # TODO: Normalise "next X" -> "+ 1 X"
+    if [[ "$lspec" =~ ^now[[:space:]]*\+[[:space:]]*([0-9]+)[[:space:]]*(second|seconds|sec|secs|s|minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks|month|months|year|years)$ ]]; then
+        local n="${BASH_REMATCH[1]}"
+        local unit="${BASH_REMATCH[2]}"
+
+        if [[ -z "$unit" ]]; then
+            # bare "now" -- schedule for immediate execution (1s delay)
+            TIMESPEC_VALUE="1s"
+            TIMESPEC_DISPLAY="$(posix_date)"
+            return 0
+        fi
+
+        # Normalise to systemd duration strings
+        case "$unit" in
+            second|seconds|sec|secs|s)  TIMESPEC_VALUE="${n}s" ;;
+            minute|minutes|min|mins)    TIMESPEC_VALUE="${n}min" ;;
+            hour|hours|hr|hrs)          TIMESPEC_VALUE="${n}h" ;;
+            day|days)                   TIMESPEC_VALUE="${n}d" ;;
+            week|weeks)                 TIMESPEC_VALUE="${n}w" ;;
+            month|months|year|years)
+                # systemd --on-active doesn't support months/years; use absolute timestamp
+                local abs
+                abs=$(date -d "now + ${n} ${unit}" +"%Y-%m-%d %H:%M:%S")
+                TIMESPEC_KIND="calendar"; TIMESPEC_VALUE="$abs" ;;
+        esac
+        TIMESPEC_DISPLAY="$(posix_date "now + ${n} ${unit}")"
+        return 0
+    fi
+
+    # -- Parse: time [date] [increment] ---------------------------------------
+    local time_part=""
+    local tz_token=""
+
+    # Named times
+    case "$lspec" in
+        noon*)      time_part="12:00:00"; lspec="${lspec#noon}" ;;
+        midnight*)  time_part="00:00:00"; lspec="${lspec#midnight}" ;;
+        teatime*)   time_part="16:00:00"; lspec="${lspec#teatime}" ;;
+    esac
+    lspec="${lspec# }"  # strip leading space after named time
+
+    # Numeric time: HH:MM[am|pm], HHMM[am|pm], or H[am|pm]
+    if [[ -z "$time_part" ]]; then
+        if [[ "$lspec" =~ ^([0-9]{1,2}):([0-9]{2})([[:space:]]*(am|pm))?([[:space:]].*|$) ]]; then
+            local hh="${BASH_REMATCH[1]}" mm="${BASH_REMATCH[2]}" ampm="${BASH_REMATCH[4]}"
+            lspec="${BASH_REMATCH[5]# }"
+            [[ "$ampm" == "pm" && "$hh" -lt 12 ]] && hh=$(( hh + 12 ))
+            [[ "$ampm" == "am" && "$hh" -eq 12 ]] && hh=0
+            time_part=$(printf "%02d:%02d:00" "$hh" "$mm")
+        elif [[ "$lspec" =~ ^([0-9]{4})([[:space:]]*(am|pm))?([[:space:]].*|$) ]]; then
+            local raw="${BASH_REMATCH[1]}" ampm="${BASH_REMATCH[3]}"
+            lspec="${BASH_REMATCH[4]# }"
+            local hh="${raw:0:2}" mm="${raw:2:2}"
+            [[ "$ampm" == "pm" && "$hh" -lt 12 ]] && hh=$(( hh + 12 ))
+            [[ "$ampm" == "am" && "$hh" -eq 12 ]] && hh=0
+            time_part=$(printf "%02d:%02d:00" "$hh" "$mm")
+        elif [[ "$lspec" =~ ^([0-9]{1,2})[[:space:]]*(am|pm)([[:space:]].*|$) ]]; then
+            local hh="${BASH_REMATCH[1]}" ampm="${BASH_REMATCH[2]}"
+            lspec="${BASH_REMATCH[3]# }"
+            [[ "$ampm" == "pm" && "$hh" -lt 12 ]] && hh=$(( hh + 12 ))
+            [[ "$ampm" == "am" && "$hh" -eq 12 ]] && hh=0
+            time_part=$(printf "%02d:%02d:00" "$hh" "00")
+        fi
+    fi
+
+    [[ -n "$time_part" ]] || die "cannot parse time from: $spec"
+
+    # Optional timezone token right after the time
+    # Detect it by checking if the next word isn't a known date/increment keyword
+    if [[ "$lspec" =~ ^([a-zA-Z][a-zA-Z0-9+/_-]*)([[:space:]].*|$) ]]; then
+        local candidate="${BASH_REMATCH[1]}"
+        case "$candidate" in
+            today|tomorrow|now|next|\
+            monday|tuesday|wednesday|thursday|friday|saturday|sunday|\
+            jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\
+            january|february|march|april|june|july|august|september|october|november|december)
+                : # not a timezone
+                ;;
+            *)
+                if TZ="$candidate" date &>/dev/null 2>&1; then
+                    tz_token="$candidate"
+                    lspec="${BASH_REMATCH[2]# }"
+                fi
+                ;;
+        esac
+    fi
+
+    # -- Date portion ---------------------------------------------------------
+    lspec="${lspec# }"
+    local date_part=""
+    local explicit_date=0
+    local inc_part=""
+
+    case "$lspec" in
+        ""|"today")
+            date_part=$(date +%Y-%m-%d)
+            ;;
+        "tomorrow")
+            date_part=$(date -d tomorrow +%Y-%m-%d)
+            explicit_date=1
+            ;;
+        "next monday"|"next tuesday"|"next wednesday"|"next thursday"|"next friday"|"next saturday"|"next sunday")
+            date_part=$(date -d "$lspec" +%Y-%m-%d)
+            explicit_date=1
+            ;;
+        "next "*)
+            # "next <period>" used as an increment after a time
+            inc_part="$lspec"
+            date_part=$(date +%Y-%m-%d)
+            ;;
+        "+"*)
+            inc_part="$lspec"
+            date_part=$(date +%Y-%m-%d)
+            ;;
+        monday|tuesday|wednesday|thursday|friday|saturday|sunday)
+            date_part=$(date -d "next $lspec" +%Y-%m-%d)
+            explicit_date=1
+            ;;
+        # YYYY-MM-DD
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+            date_part="$lspec"
+            explicit_date=1
+            ;;
+        # MM/DD/YYYY
+        [0-9][0-9]/[0-9][0-9]/[0-9][0-9][0-9][0-9]|[0-9]/[0-9][0-9]/[0-9][0-9][0-9][0-9]|[0-9][0-9]/[0-9]/[0-9][0-9][0-9][0-9])
+            date_part=$(date -d "$lspec" +%Y-%m-%d)
+            explicit_date=1
+            ;;
+        # DD.MM.YYYY
+        [0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9])
+            local d="${lspec:0:2}" m="${lspec:3:2}" y="${lspec:6:4}"
+            date_part=$(date -d "${y}-${m}-${d}" +%Y-%m-%d)
+            explicit_date=1
+            ;;
+        # "Jan 15", "15 Jan", "January 15", etc.
+        *)
+            # Try to split a trailing increment, then let date(1) handle the rest
+            local rest="$lspec"
+            if [[ "$rest" =~ ^(.*[^+[:space:]])[[:space:]]+(\+[[:space:]]*[0-9]|next[[:space:]])(.*)$ ]]; then
+                local date_tok="${BASH_REMATCH[1]}"
+                inc_part="${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+                date_part=$(date -d "$date_tok" +%Y-%m-%d 2>/dev/null) \
+                    || die "cannot parse date: '$date_tok'"
+            else
+                date_part=$(date -d "$rest" +%Y-%m-%d 2>/dev/null) \
+                    || die "cannot parse date from: '$rest' (in spec: $spec)"
+            fi
+            explicit_date=1 ;;
+    esac
+
+    # -- Apply increment ------------------------------------------------------
+    # If the resulting timestamp is in the past (and no explicit date given),
+    # roll forward to the next day — matching at(1) behaviour for bare times.
+    local full_ts="${date_part} ${time_part}"
+
+    if [[ -n "$inc_part" ]]; then
+        inc_part="${inc_part# }"
+        # "next X" -> "+ 1 X"
+        if [[ "$inc_part" =~ ^next[[:space:]]+(minute|minutes|hour|hours|day|days|week|weeks|month|months|year|years)$ ]]; then
+            inc_part="+ 1 ${BASH_REMATCH[1]}"
+        fi
+        if [[ "$inc_part" =~ ^\+[[:space:]]*([0-9]+)[[:space:]]*(second|seconds|sec|secs|minute|minutes|hour|hours|day|days|week|weeks|month|months|year|years)$ ]]; then
+            local inc_n="${BASH_REMATCH[1]}" inc_u="${BASH_REMATCH[2]}"
+            full_ts=$(date -d "${full_ts} + ${inc_n} ${inc_u}" +"%Y-%m-%d %H:%M:%S") \
+                || die "cannot apply increment '${inc_part}'"
+            explicit_date=1
+        else
+            die "cannot parse increment: '$inc_part'"
+        fi
+    fi
+
+    # Roll forward to tomorrow if time already passed and no explicit date
+    if [[ $explicit_date -eq 0 ]]; then
+        local target_epoch now_epoch
+        target_epoch=$(date -d "$full_ts" +%s)
+        now_epoch=$(date +%s)
+        if (( target_epoch <= now_epoch )); then
+            full_ts=$(date -d "tomorrow ${time_part}" +"%Y-%m-%d %H:%M:%S")
+        fi
+    fi
+
+    # Apply timezone
+    if [[ -n "$tz_token" ]]; then
+        full_ts=$(TZ="$tz_token" date -d "$full_ts" +"%Y-%m-%d %H:%M:%S")
+    fi
+
+    TIMESPEC_KIND="calendar"
+    TIMESPEC_VALUE="$full_ts"
+    TIMESPEC_DISPLAY="$(posix_date "$full_ts")"
+}
+
+### -- -t time_arg parser  (touch -t format: [[CC]YY]MMDDhhmm[.ss]) -----------
+parse_t_arg() {
+    local arg="$1"
+    local ss="00"
+    local digits="$arg"
+
+    # Strip optional .ss suffix
+    if [[ "$arg" == *"."* ]]; then
+        ss="${arg##*.}"
+        digits="${arg%%.*}"
+    fi
+
+    local len="${#digits}"
+    local cc yy mm dd hh mi
+    case "$len" in
+        12) cc="${digits:0:2}" yy="${digits:2:2}" mm="${digits:4:2}"
+            dd="${digits:6:2}" hh="${digits:8:2}" mi="${digits:10:2}" ;;
+        10) yy="${digits:0:2}" mm="${digits:2:2}" dd="${digits:4:2}"
+            hh="${digits:6:2}" mi="${digits:8:2}"
+            (( 10#$yy >= 69 )) && cc="19" || cc="20" ;;
+         8) mm="${digits:0:2}" dd="${digits:2:2}"
+            hh="${digits:4:2}" mi="${digits:6:2}"
+            cc=$(date +%C) yy=$(date +%y) ;;
+         *) die "-t: invalid time_arg (expected [[CC]YY]MMDDhhmm[.ss]): $arg" ;;
+    esac
+
+    # Validate digit-only content
+    [[ "$digits" =~ ^[0-9]+$ ]] || die "-t: non-digit characters in time_arg: $arg"
+    [[ "$ss" =~ ^[0-9]{2}$ ]]   || die "-t: invalid seconds in time_arg: $arg"
+
+    local full_ts="${cc}${yy}-${mm}-${dd} ${hh}:${mi}:${ss}"
+    date -d "$full_ts" &>/dev/null || die "-t: invalid date/time: $full_ts"
+
+    TIMESPEC_KIND="calendar"
+    TIMESPEC_VALUE=$(date -d "$full_ts" +"%Y-%m-%d %H:%M:%S")
+    TIMESPEC_DISPLAY="$(posix_date "$TIMESPEC_VALUE")"
+}
+
+### -- schedule ---------------------------------------------------------------
+schedule_job() {
+    local timespec="$1"
+    local t_arg="$2"
+    local script_file="$3"   # path to the script to run, or ""
+    local mail_flag="$4"     # 1 = send mail on completion, 0 = no
+    local inline_cmd="$5"    # inline command string (from -- args), or ""
+
+    mkdir -p "$JOB_DIR"
+    local jid
+    jid=$(next_job_id)
+
+    # -- Parse time -----------------------------------------------------------
+    TIMESPEC_KIND="" TIMESPEC_VALUE="" TIMESPEC_DISPLAY=""
+    if [[ -n "$t_arg" ]]; then
+        parse_t_arg "$t_arg"
+    else
+        parse_timespec "$timespec"
+    fi
+    local kind="$TIMESPEC_KIND"
+    local value="$TIMESPEC_VALUE"
+    local display="$TIMESPEC_DISPLAY"
+
+    # -- Capture environment --------------------------------------------------
+    local env_file="$JOB_DIR/env-${jid}.sh"
+    capture_env "$env_file"
+
+    # -- Build the job script -------------------------------------------------
+    local job_script="$JOB_DIR/job-${jid}.sh"
+
+    if [[ -n "$inline_cmd" ]]; then
+        # Command supplied inline after --
+        printf '#!/usr/bin/env bash\n%s\n' "$inline_cmd" > "$job_script"
+    elif [[ -n "$script_file" ]]; then
+        cp "$script_file" "$job_script"
+    elif [[ -t 0 ]]; then
+        # stdin is a terminal — prompt the user, read until Ctrl-D
+        echo "at> (enter commands, finish with Ctrl-D)" >&2
+        cat > "$job_script"
+    else
+        # stdin is a pipe or redirect — read silently
+        cat > "$job_script"
+    fi
+    chmod +x "$job_script"
+
+    # Honour $SHELL as required by POSIX
+    local job_shell="${SHELL:-/bin/sh}"
+    command -v "$job_shell" &>/dev/null || job_shell="/bin/sh"
+
+    # -- Build wrapper --------------------------------------------------------
+    local exec_script="$JOB_DIR/run-${jid}.sh"
+    cat > "$exec_script" <<WRAPPER
+#!${job_shell}
+# at wrapper for job ${jid}
+. "${env_file}"
+output=\$(${job_shell} "${job_script}" 2>&1)
+exit_code=\$?
+WRAPPER
+
+    if [[ "$mail_flag" == "1" ]]; then
+        # -m: always send mail, even with no output
+        cat >> "$exec_script" <<WRAPPER
+if command -v mail >/dev/null 2>&1; then
+    printf '%s\n' "\$output" | mail -s "Output from at job ${jid}" "\${LOGNAME:-\$(id -un)}"
+fi
+WRAPPER
+    else
+        # POSIX default: send mail only if there is output
+        cat >> "$exec_script" <<WRAPPER
+if [ -n "\$output" ] && command -v mail >/dev/null 2>&1; then
+    printf '%s\n' "\$output" | mail -s "Output from at job ${jid}" "\${LOGNAME:-\$(id -un)}"
+fi
+WRAPPER
+    fi
+
+    cat >> "$exec_script" <<WRAPPER
+# Clean up job files
+gio trash -f "${env_file}" "${job_script}" "${exec_script}"
+exit \$exit_code
+WRAPPER
+    chmod +x "$exec_script"
+
+    # -- Validate with systemd-analyze when using calendar --------------------
+    if [[ "$kind" == "calendar" ]]; then
+        systemd-analyze calendar "$value" &>/dev/null \
+            || die "systemd-analyze rejected calendar spec '$value'"
+    fi
+
+    # -- Generate unique unit name --------------------------------------------
+    local rand
+    rand=$(tr -dc 'a-f0-9' < /dev/urandom | head -c 8 || date +%N | md5sum | cut -c1-8)
+    local unit_name="${UNIT_PREFIX}-${jid}-${rand}"
+
+    # -- Schedule with systemd-run --------------------------------------------
+    local sd_args=(
+        --user
+        --unit="$unit_name"
+        --description="at job ${jid}"
+        --timer-property=AccuracySec=1s
+        --timer-property=RemainAfterElapse=no
+        --no-block
+    )
+
+    if [[ "$kind" == "active" ]]; then
+        sd_args+=( --on-active="$value" )
+    else
+        sd_args+=( --on-calendar="$value" )
+    fi
+
+    sd_args+=( /bin/bash "$exec_script" )
+
+    systemd-run "${sd_args[@]}" 2>/dev/null
+
+    # POSIX-specified stderr confirmation
+    printf 'job %s at %s\n' "$jid" "$display" >&2
+}
+
+### -- main -------------------------------------------------------------------
+
+require systemd-run systemctl systemd-analyze
+
+list_mode=0
+delete_mode=0
+delete_ids=()
+script_file=""
+mail_flag=0
+t_arg=""
+
+while getopts ":lhmf:q:t:r:d:" opt; do
+    case "$opt" in
+        l) list_mode=1 ;;
+        m) mail_flag=1 ;;
+        f) script_file="$OPTARG" ;;
+        q) : ;;   # queue — accepted, ignored, reserved for future use
+        t) t_arg="$OPTARG" ;;
+        r|d) delete_mode=1; delete_ids+=("$OPTARG") ;;
+        h) usage ;;
+        :) die "option -$OPTARG requires an argument" ;;
+        ?) die "unknown option: -$OPTARG" ;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+
+if [[ $list_mode -eq 1 ]]; then
+    list_jobs "$@"
+    exit 0
+fi
+
+if [[ $delete_mode -eq 1 ]]; then
+    for id in "${delete_ids[@]}" "$@"; do
+        remove_job "$id"
+    done
+    exit 0
+fi
+
+if [[ -n "$t_arg" && $# -gt 0 && "$1" != "--" ]]; then
+    die "-t and a timespec are mutually exclusive"
+fi
+
+# Split positional args on "--": left side = timespec, right side = inline cmd
+timespec_args=()
+inline_cmd=""
+found_sep=0
+for arg in "$@"; do
+    if [[ $found_sep -eq 1 ]]; then
+        inline_cmd+="${inline_cmd:+ }${arg}"
+    elif [[ "$arg" == "--" ]]; then
+        found_sep=1
+    else
+        timespec_args+=("$arg")
+    fi
+done
+
+timespec="${timespec_args[*]:-}"
+[[ -n "$timespec" || -n "$t_arg" ]] || die "no time specification given"
+
+schedule_job "$timespec" "$t_arg" "$script_file" "$mail_flag" "$inline_cmd"
